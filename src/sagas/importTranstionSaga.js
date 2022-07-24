@@ -1,7 +1,10 @@
-import { take, put } from "redux-saga/effects";
-import { importTransitions } from "../sagas/requestTransitionsSaga";
+import { take, put, delay } from "redux-saga/effects";
 import formatter from "../utils/formatter";
-import { readingFileErrorOccurred } from "../reducers/transactionReducer";
+import {
+  readingFileErrorOccurred,
+  importTransitions,
+  disableReadingFileError
+} from "../reducers/transactionReducer";
 
 export const READ_FILE = "READ_FILE";
 
@@ -15,8 +18,14 @@ export function* importTransitionWatcher() {
 function* importTransitionWorker(file) {
   const reader = new FileReader();
 
-  if (file.type.split("/")[1] !== "csv") {
+  function* throwMistake() {
     yield put(readingFileErrorOccurred());
+    yield delay(5000);
+    yield put(disableReadingFileError());
+  }
+
+  if (file.type.split("/")[1] !== "csv") {
+    yield throwMistake();
     return;
   }
 
@@ -34,7 +43,7 @@ function* importTransitionWorker(file) {
       };
     });
   } catch {
-    yield put(readingFileErrorOccurred());
+    yield throwMistake();
     return;
   }
 
@@ -43,7 +52,15 @@ function* importTransitionWorker(file) {
     .map((text) => text.replace(/\r/, ""))
     .slice(1);
 
-  const formatted = formatter(textMass);
+  if (textMass.length===0) {
+    yield throwMistake();
+    return;
+  }
 
-  yield put(importTransitions(formatted));
+  const formatted = formatter(textMass);
+  const filtered = formatted.filter(elem=>{
+    return !Object.values(elem).some(field=>field===undefined);
+  });
+
+  yield put(importTransitions(filtered));
 }

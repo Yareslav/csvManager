@@ -23,4 +23,25 @@ body {
       -ms-flex-align: center;
           align-items: center;
 }
+
+.arrow {
+  height: 35px;
+}
+
+.center {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-pack: center;
+      -ms-flex-pack: center;
+          justify-content: center;
+}
+
+td, th {
+  text-align: center;
+}
+
+.name {
+  color: blue;
+}
 /*# sourceMappingURL=style.css.map */

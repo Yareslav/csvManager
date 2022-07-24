@@ -1,4 +1,11 @@
-import { Modal, Button, Form } from "react-bootstrap";
+import {
+  Modal,
+  Button,
+  Form,
+  ToggleButton,
+  ButtonGroup,
+} from "react-bootstrap";
+//! redux staff
 import { useDispatch, useSelector } from "react-redux";
 import {
   modalWindowMods,
@@ -6,21 +13,32 @@ import {
   statuses,
   deleteTransition,
   editTransitionStatus,
+  changeExportColumns,
 } from "../reducers/transactionReducer";
-import { useEffect, useRef, useState } from "react";
-import {READ_FILE} from "../sagas/importTranstionSaga";
+
+import { useState } from "react";
+import { READ_FILE } from "../sagas/importTranstionSaga";
+import { saveAs } from "file-saver";
 
 const ModalWindow = () => {
   //! data from reducer
   const typeGetter = (type) => (store) => store.transactionReducer[type];
-
-  const modalWindowMode = useSelector(typeGetter("modalWindowMode"));
-  const status = useSelector(typeGetter("status"));
   const dispatch = useDispatch();
 
+  const modalWindowMode = useSelector(typeGetter("modalWindowMode"));
+  const transactionHashTable = useSelector(typeGetter("transactionHashTable"));
+  const selectedTransitionId = useSelector(typeGetter("selectedTransitionId"));
+  const exportColumns = useSelector(typeGetter("exportColumns"));
+  //! for exporting file
+  const areFiltersOn = useSelector(typeGetter("areFiltersOn"));
+  const filteredTransactionHashTable = useSelector(
+    typeGetter("filteredTransactionHashTable")
+  );
+
+  const status = transactionHashTable[selectedTransitionId]?.status;
   const [currentStatus, setCurrentStatus] = useState(status);
   const [file, setFile] = useState(null);
-  //!refs
+
   //! jsx getters
   const getTitle = () => {
     if (modalWindowMode === modalWindowMods.delete) return "File deleting";
@@ -29,6 +47,8 @@ const ModalWindow = () => {
   };
 
   const getBody = () => {
+    const clientName = transactionHashTable[selectedTransitionId]?.clientName;
+
     if (modalWindowMode === modalWindowMods.insertFile)
       return (
         <Form.Control
@@ -44,24 +64,70 @@ const ModalWindow = () => {
       );
 
       return (
-        <Form.Select size="lg" onChange={(value) => setCurrentStatus(value)}>
-          {options.map((elem) => (
-            <option key={elem} value={elem}>
-              {elem}
-            </option>
-          ))}
-        </Form.Select>
+        <>
+          <h6>
+            Do you want to edit status of{" "}
+            <span className="name">{clientName}</span> transaction ?
+          </h6>
+
+          <Form.Select
+            size="lg"
+            onChange={(eve) => setCurrentStatus(eve.target.value)}
+            value={currentStatus}
+          >
+            {options.map((elem) => (
+              <option key={elem} value={elem}>
+                {elem}
+              </option>
+            ))}
+          </Form.Select>
+        </>
       );
     }
 
     if (modalWindowMode === modalWindowMods.delete)
-      return <h3>Are you sure you want to delete this transaction ?</h3>;
+      return (
+        <h3>
+          Are you sure you want to delete
+          <span className="name">{clientName}</span> transaction ?
+        </h3>
+      );
+
+    if (modalWindowMode === modalWindowMods.export) {
+      const fields = Object.entries(exportColumns);
+      return (
+        <>
+          <h4>Choose fields you want to download</h4>
+          <ButtonGroup>
+            {fields.map(([key, data]) => (
+              <Button
+                key={key}
+                type="checkbox"
+                variant={data.checked ? "success" : "outline-success"}
+                style={{ opacity: data.checked ? 1 : 0.5 }}
+                onClick={() => dispatch(changeExportColumns(key))}
+              >
+                {data.displayName}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </>
+      );
+    }
   };
 
-  const isDisabled = () => {
+  const isDisabledButton = () => {
     if (modalWindowMode === modalWindowMods.insertFile && !file) return true;
     if (modalWindowMode === modalWindowMods.edit && currentStatus === status)
       return true;
+
+    if (modalWindowMode === modalWindowMods.export) {
+      const booleanArray = Object.values(exportColumns).map(
+        (obj) => obj.checked
+      );
+
+      if (!booleanArray.includes(true)) return true;
+    }
     return false;
   };
   //!handlers
@@ -69,13 +135,48 @@ const ModalWindow = () => {
     dispatch(changeModalWindowType(modalWindowMods.none));
   };
 
+  const downloadFile = () => {
+    const selectedColumnObjects = Object.entries(exportColumns).filter(
+      ([_, data]) => {
+        return data.checked;
+      }
+    );
+
+    const columnDisplayNames = selectedColumnObjects.map(
+      ([_, data]) => data.displayName
+    );
+    const firstFileLine = columnDisplayNames.join(",") + "\n";
+
+    const columnKeys = selectedColumnObjects.map(([key]) => key);
+    const transitions = Object.values(
+      areFiltersOn ? filteredTransactionHashTable : transactionHashTable
+    );
+
+    const outputTransitionData = transitions.map((transition) => {
+      const entries = Object.entries(transition);
+      const filtered = entries.filter(([key, _]) =>
+        columnKeys.includes(key)
+      );
+
+      const stringsArray = filtered.map(([_,string]) => string);
+      return stringsArray.join(",") + "\n";
+    });
+
+    const file = new File([firstFileLine,...outputTransitionData], "transactions.csv", {
+      type: "text/plain;charset=utf-8",
+    });
+
+    saveAs(file);
+  };
+
   const submitHandler = () => {
     if (modalWindowMode === modalWindowMods.delete)
       dispatch(deleteTransition());
     else if (modalWindowMode === modalWindowMods.edit)
       dispatch(editTransitionStatus(currentStatus));
-    else dispatch({type:READ_FILE,payload:file});
-
+    else if (modalWindowMode === modalWindowMods.insertFile)
+      dispatch({ type: READ_FILE, payload: file });
+    else if (modalWindowMode === modalWindowMods.export) downloadFile();
     dispatch(changeModalWindowType(modalWindowMods.none));
   };
 
@@ -94,7 +195,7 @@ const ModalWindow = () => {
         <Button
           variant="success"
           onClick={submitHandler}
-          disabled={isDisabled()}
+          disabled={isDisabledButton()}
         >
           Ok
         </Button>
