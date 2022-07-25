@@ -15,10 +15,10 @@ import {
   editTransitionStatus,
   changeExportColumns,
 } from "../reducers/transactionReducer";
-
-import { useState } from "react";
 import { READ_FILE } from "../sagas/importTranstionSaga";
-import { saveAs } from "file-saver";
+//! utils
+import downloadFile from "../utils/downloadFile";
+import { useState } from "react";
 
 const ModalWindow = () => {
   //! data from reducer
@@ -135,48 +135,21 @@ const ModalWindow = () => {
     dispatch(changeModalWindowType(modalWindowMods.none));
   };
 
-  const downloadFile = () => {
-    const selectedColumnObjects = Object.entries(exportColumns).filter(
-      ([_, data]) => {
-        return data.checked;
-      }
-    );
-
-    const columnDisplayNames = selectedColumnObjects.map(
-      ([_, data]) => data.displayName
-    );
-    const firstFileLine = columnDisplayNames.join(",") + "\n";
-
-    const columnKeys = selectedColumnObjects.map(([key]) => key);
-    const transitions = Object.values(
-      areFiltersOn ? filteredTransactionHashTable : transactionHashTable
-    );
-
-    const outputTransitionData = transitions.map((transition) => {
-      const entries = Object.entries(transition);
-      const filtered = entries.filter(([key, _]) =>
-        columnKeys.includes(key)
-      );
-
-      const stringsArray = filtered.map(([_,string]) => string);
-      return stringsArray.join(",") + "\n";
-    });
-
-    const file = new File([firstFileLine,...outputTransitionData], "transactions.csv", {
-      type: "text/plain;charset=utf-8",
-    });
-
-    saveAs(file);
-  };
-
   const submitHandler = () => {
     if (modalWindowMode === modalWindowMods.delete)
       dispatch(deleteTransition());
+
     else if (modalWindowMode === modalWindowMods.edit)
       dispatch(editTransitionStatus(currentStatus));
+
     else if (modalWindowMode === modalWindowMods.insertFile)
       dispatch({ type: READ_FILE, payload: file });
-    else if (modalWindowMode === modalWindowMods.export) downloadFile();
+
+    else if (modalWindowMode === modalWindowMods.export)
+      downloadFile(
+        exportColumns,
+        areFiltersOn ? filteredTransactionHashTable : transactionHashTable
+      );
     dispatch(changeModalWindowType(modalWindowMods.none));
   };
 
